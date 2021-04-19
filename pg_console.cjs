@@ -11,6 +11,16 @@ const pool = new Pool({
   port: process.env.PG_PORT
 })
 
+const querySync = async (query, params, callback) => {
+  pool.query(query, params)
+    .then(response => {
+      callback(response)
+    })
+    .catch(error => {
+      callback(response)
+    })
+}
+
 // start REPL server
 
 var replServer = repl.start({});
@@ -18,3 +28,4 @@ var replServer = repl.start({});
 // set REPL context
 
 replServer.context.pool = pool
+replServer.context.querySync = querySync

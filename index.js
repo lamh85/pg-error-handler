@@ -1,4 +1,4 @@
-const transpileQuery = (query, params) => {
+const toQueryLines = (query, params) => {
   let transpiled = query
 
   params.forEach((param, index) => {
@@ -7,18 +7,10 @@ const transpileQuery = (query, params) => {
     transpiled = transpiled.replace(paramPattern, param)
   })
 
-  return transpiled
+  return transpiled.split(/\r?\n/g)
 }
 
-const handleError = ({
-  query,
-  params,
-  error
-}) => {
-  const queryTranspiled = transpileQuery(query, params)
-
-  const queryLines = queryTranspiled.split(/\r?\n/g)
-
+const getKaratPosition = ({ queryLines, error}) => {
   const errObjPosition = parseInt(error.position)
   let charactersPassed = 0
   let linesPassed = 0
@@ -42,24 +34,65 @@ const handleError = ({
       ((accum, line) => accum + line.length + 1),
       0
     )
-  const charNumAtErrorLine = errObjPosition - charLengthBeforeErrorLine
+  const karatLeftOffset = errObjPosition - charLengthBeforeErrorLine
 
-  const errorLineIndex = errorLine - 1
-
-  const lineIndexBeforeError = errorLineIndex - 1
-  if (lineIndexBeforeError >= 0) {
-    console.log(queryLines[lineIndexBeforeError])
-  }
-  console.log(queryLines[errorLineIndex])
-  console.log('^'.padStart(charNumAtErrorLine, ' '))
-  const lineIndexAfterError = errorLineIndex + 1
-  if (lineIndexAfterError <= queryLines.length - 1) {
-    console.log()
+  return {
+    karatLeftOffset,
+    errorLineIndex
   }
 }
 
-const query = `SELECT FROM (
-  SELECT 5, AS number, $1 AS second, $2 AS third
-);`
+const printErrorLocation = ({
+  queryLines,
+  errorLineIndex,
+  karatLeftOffset
+}) => {
+  const lineIndexBeforeError = errorLineIndex - 1
+  const lineIndexAfterError = errorLineIndex + 1
 
-const params = [1, 'foo']
+  queryLines.forEach((line, index) => {
+    if (
+      [lineIndexBeforeError, errorLineIndex, lineIndexAfterError].includes(index)
+    ) {
+      console.log(line)
+    }
+
+    if (index === errorLineIndex) {
+      console.log('^'.padStart(karatLeftOffset, ' '))
+    }
+  })
+}
+
+const handleError = ({
+  query,
+  params,
+  error
+}) => {
+  const queryLines = toQueryLines({ query, params })
+
+  const {
+    karatLeftOffset,
+    errorLineIndex
+  } = getKaratPosition({ queryLines, params, error })
+
+  printErrorLocation({
+    queryLines,
+    errorLineIndex,
+    karatLeftOffset
+  })
+}
+
+// run this in Node (or REPL) console ----
+const runInConsole = () => {
+  const query = `SELECT FROM (
+    SELECT 5, AS number, $1 AS second, $2 AS third
+  );`
+
+  const params = [1, 'foo']
+
+  let error
+
+  pool.query(query, params).catch(x => error = x)
+
+  handleError({ query, params, error })
+}
