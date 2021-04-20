@@ -1,7 +1,9 @@
-import yargs from 'yargs'
-import { hideBin } from 'yargs/helpers'
+// import yargs from 'yargs'
+// import { hideBin } from 'yargs/helpers'
 
-const toQueryLines = (query, params) => {
+import { pool } from './database_connection.js'
+
+const toQueryLines = ({ query, params }) => {
   let transpiled = query
 
   params.forEach((param, index) => {
@@ -45,13 +47,22 @@ const getKaratPosition = ({ queryLines, error}) => {
   }
 }
 
-const printErrorLocation = ({
+const printError = ({
   queryLines,
   errorLineIndex,
-  karatLeftOffset
+  karatLeftOffset,
+  error
 }) => {
   const lineIndexBeforeError = errorLineIndex - 1
   const lineIndexAfterError = errorLineIndex + 1
+
+  const heading = [
+    error.message,
+    `Query lines ${lineIndexBeforeError + 1} to ${lineIndexAfterError + 1}:`,
+    '---'
+  ]
+  
+  heading.forEach(line => console.log(line))
 
   queryLines.forEach((line, index) => {
     if (
@@ -78,27 +89,34 @@ const handleError = ({
     errorLineIndex
   } = getKaratPosition({ queryLines, params, error })
 
-  printErrorLocation({
+  printError({
     queryLines,
     errorLineIndex,
-    karatLeftOffset
+    karatLeftOffset,
+    error
   })
 }
 
 // run this in Node (or REPL) console ----
-const runInConsole = () => {
-  const query = `SELECT FROM (
-    SELECT 5, AS number, $1 AS second, $2 AS third
-  );`
+const runQA = async () => {
+  const query = `
+    SELECT * FROM (
+      SELECT 5 AS number, $1 AS second, $2 AS third
+      UNION
+      SELECT 5 AS number, 4 AS second
+    ) sub_query;
+  `
 
   const params = [1, 'foo']
 
-  let error
-
-  pool.query(query, params).catch(x => error = x)
-
-  handleError({ query, params, error })
+  try {
+    await pool.query(query, params)
+  } catch(error) {
+    handleError({ query, params, error })
+  }
 }
 
-const commandArgs = yargs(hideBin(process.argv)).argv
-console.log(commandArgs)
+runQA()
+
+// const commandArgs = yargs(hideBin(process.argv)).argv
+// console.log(commandArgs)
