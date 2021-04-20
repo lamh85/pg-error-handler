@@ -1,3 +1,6 @@
+import yargs from 'yargs'
+import { hideBin } from 'yargs/helpers'
+
 const toQueryLines = (query, params) => {
   let transpiled = query
 
@@ -96,3 +99,6 @@ const runInConsole = () => {
 
   handleError({ query, params, error })
 }
+
+const commandArgs = yargs(hideBin(process.argv)).argv
+console.log(commandArgs)
