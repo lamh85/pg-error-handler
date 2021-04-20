@@ -64,17 +64,14 @@ const printError = ({
   
   heading.forEach(line => console.log(line))
 
-  queryLines.forEach((line, index) => {
-    if (
-      [lineIndexBeforeError, errorLineIndex, lineIndexAfterError].includes(index)
-    ) {
-      console.log(line)
-    }
+  const body = [
+    queryLines[lineIndexBeforeError],
+    queryLines[errorLineIndex],
+    '^'.padStart(karatLeftOffset, ' '),
+    queryLines[lineIndexAfterError]
+  ]
 
-    if (index === errorLineIndex) {
-      console.log('^'.padStart(karatLeftOffset, ' '))
-    }
-  })
+  body.forEach(line => console.log(line))
 }
 
 const handleError = ({
