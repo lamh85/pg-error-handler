@@ -116,16 +116,24 @@ const writeToFile = transpiledQuery => {
 
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = path.dirname(__filename)
-  const savePath = path.join(__dirname, `/../queries/${timeStamp}.sql`)
 
-  fs.appendFile(savePath, transpiledQuery, error => {
+  const relativeDir = '/../logged_queries'
+  const saveDir = path.join(__dirname, relativeDir)
+
+  if (!fs.existsSync(saveDir)) {
+    fs.mkdirSync(saveDir)
+  }
+
+  const filePath = path.join(__dirname, relativeDir, `/${timeStamp}.sql`)
+
+  fs.appendFile(filePath, transpiledQuery, error => {
     if (error) {
       console.log('There was a problem with logging the query:')
       console.log(error)
       return
     }
 
-    console.log('Query is logged: ', savePath)
+    console.log('Query is logged: ', filePath)
   })
 }
 
