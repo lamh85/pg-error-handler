@@ -66,7 +66,7 @@ const printError = ({
   karatLeftOffset,
   error
 }) => {
-  const karatLine = '^'.padStart(karatLeftOffset, ' ')
+  const karatLine = '▲'.padStart(karatLeftOffset, ' ')
 
   const lineIndexAfterError = errorLineIndex + 1
   const errorLineRightBoundary = leftBoundariesByLine[lineIndexAfterError] - 1
