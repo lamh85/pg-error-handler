@@ -117,14 +117,13 @@ const writeToFile = transpiledQuery => {
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = path.dirname(__filename)
 
-  const relativeDir = '/../logged_queries'
-  const saveDir = path.join(__dirname, relativeDir)
+  const absoluteDir = path.join(__dirname, '/../logged_queries')
 
-  if (!fs.existsSync(saveDir)) {
-    fs.mkdirSync(saveDir)
+  if (!fs.existsSync(absoluteDir)) {
+    fs.mkdirSync(absoluteDir)
   }
 
-  const filePath = path.join(__dirname, relativeDir, `/${timeStamp}.sql`)
+  const filePath = path.join(absoluteDir, `/${timeStamp}.sql`)
 
   fs.appendFile(filePath, transpiledQuery, error => {
     if (error) {
