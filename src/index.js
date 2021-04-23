@@ -1,6 +1,10 @@
 // import yargs from 'yargs'
 // import { hideBin } from 'yargs/helpers'
 
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
 import { pool } from './database_connection.js'
 
 const PRINT_CONFIG = {
@@ -20,7 +24,7 @@ const toTranspiledQuery = ({ query, params }) => {
   return transpiled
 }
 
-const getPrintingSpecs = ({ transpiledQuery, error }) => {
+const getErrorLocation = ({ transpiledQuery, error }) => {
   const leftBoundariesByLine = []
 
   transpiledQuery.split('').forEach((character, index) => {
@@ -107,6 +111,24 @@ const printError = ({
   console.log(querySectionToPrint)
 }
 
+const writeToFile = transpiledQuery => {
+  const timeStamp = +(new Date())
+
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = path.dirname(__filename)
+  const savePath = path.join(__dirname, `/../queries/${timeStamp}.sql`)
+
+  fs.appendFile(savePath, transpiledQuery, error => {
+    if (error) {
+      console.log('There was a problem with logging the query:')
+      console.log(error)
+      return
+    }
+
+    console.log('Query is logged: ', savePath)
+  })
+}
+
 const handleError = ({
   query,
   params,
@@ -118,7 +140,7 @@ const handleError = ({
     karatLeftOffset,
     errorLineIndex,
     leftBoundariesByLine
-  } = getPrintingSpecs({ transpiledQuery, error })
+  } = getErrorLocation({ transpiledQuery, error })
 
   printError({
     transpiledQuery,
@@ -127,6 +149,8 @@ const handleError = ({
     karatLeftOffset,
     error
   })
+
+  writeToFile(transpiledQuery)
 }
 
 // run this in Node (or REPL) console ----
