@@ -1,9 +1,18 @@
 // import yargs from 'yargs'
 // import { hideBin } from 'yargs/helpers'
 
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
 import { pool } from './database_connection.js'
 
-const toQueryLines = ({ query, params }) => {
+const PRINT_CONFIG = {
+  linesBeforeError: 2,
+  linesAfterError: 2
+}
+
+const toTranspiledQuery = ({ query, params }) => {
   let transpiled = query
 
   params.forEach((param, index) => {
@@ -12,66 +21,120 @@ const toQueryLines = ({ query, params }) => {
     transpiled = transpiled.replace(paramPattern, param)
   })
 
-  return transpiled.split(/\r?\n/g)
+  return transpiled
 }
 
-const getKaratPosition = ({ queryLines, error}) => {
-  const errObjPosition = parseInt(error.position)
-  let charactersPassed = 0
-  let linesPassed = 0
-  while (charactersPassed < errObjPosition) {
-    const currentLineIndex = linesPassed
-    const currentLine = queryLines[currentLineIndex]
+const getErrorLocation = ({ transpiledQuery, error }) => {
+  const leftBoundariesByLine = []
 
-    // add 1 to represent a line break
-    const lineLength = currentLine.length + 1
+  transpiledQuery.split('').forEach((character, index) => {
+    if (character !== '\n') return
 
-    charactersPassed += lineLength
-    linesPassed += 1
-  }
+    const position = index + 1
+    leftBoundariesByLine.push(position)
+  })
 
-  const errorLine = linesPassed
-  const errorLineIndex = errorLine - 1
-  const charLengthBeforeErrorLine = queryLines
-    .slice(0, errorLineIndex)
-    // add 1 to represent a line break
-    .reduce(
-      ((accum, line) => accum + line.length + 1),
-      0
-    )
-  const karatLeftOffset = errObjPosition - charLengthBeforeErrorLine
+  let errorLineIndex = null
+  const errorPosition = error.position
+  leftBoundariesByLine.forEach((position, index) => {
+    if (errorLineIndex !== null) return
 
-  return {
-    karatLeftOffset,
-    errorLineIndex
-  }
+    if (index === (leftBoundariesByLine.length - 1)) {
+      errorLineIndex = index
+      return
+    }
+
+    const currentLinePosition = position
+    const nextLineLeftBoundary = leftBoundariesByLine[index + 1]
+
+
+    if (errorPosition >= currentLinePosition && errorPosition <= nextLineLeftBoundary) {
+      errorLineIndex = index
+    }
+  })
+
+  const errorLinePosition = leftBoundariesByLine[errorLineIndex]
+  const karatLeftOffset = errorPosition - errorLinePosition
+
+  return { errorLineIndex, karatLeftOffset, leftBoundariesByLine }
 }
 
 const printError = ({
-  queryLines,
+  transpiledQuery,
+  leftBoundariesByLine,
   errorLineIndex,
   karatLeftOffset,
   error
 }) => {
-  const lineIndexBeforeError = errorLineIndex - 1
+  const karatLine = '^'.padStart(karatLeftOffset, ' ')
+
   const lineIndexAfterError = errorLineIndex + 1
+  const errorLineRightBoundary = leftBoundariesByLine[lineIndexAfterError] - 1
 
-  const heading = [
-    error.message,
-    `Query lines ${lineIndexBeforeError + 1} to ${lineIndexAfterError + 1}:`,
-    '---'
-  ]
-  
-  heading.forEach(line => console.log(line))
+  const firstPrintLineIndex = Math.max(
+    0,
+    errorLineIndex - PRINT_CONFIG.linesBeforeError
+  )
 
-  const body = [
-    queryLines[lineIndexBeforeError],
-    queryLines[errorLineIndex],
-    '^'.padStart(karatLeftOffset, ' '),
-    queryLines[lineIndexAfterError]
-  ]
+  const firstPrintLineLeftBoundary = leftBoundariesByLine[firstPrintLineIndex]
 
-  body.forEach(line => console.log(line))
+  const lastPrintLineIndex = Math.min(
+    leftBoundariesByLine.length - 1,
+    errorLineIndex + PRINT_CONFIG.linesAfterError
+  )
+
+  let lastPrintLineRightBoundary = transpiledQuery.length
+  if (lastPrintLineIndex < leftBoundariesByLine.length - 1) {
+    lastPrintLineRightBoundary = leftBoundariesByLine[lastPrintLineIndex + 1] - 1
+  }
+
+  const querySectionToPrint = transpiledQuery
+    .split('')
+    .map((character, index) => {
+      const position = index + 1
+
+      if (position < firstPrintLineLeftBoundary || position > lastPrintLineRightBoundary) {
+        return
+      }
+
+      if (position === errorLineRightBoundary) {
+        return character + '\n' + karatLine
+      } else {
+        return character
+      }
+    })
+    .join('')
+
+  console.log('Message from the `error` object: ', error.message)
+  console.log(`Query location of the error (lines ${firstPrintLineIndex + 1} to ${lastPrintLineIndex + 1}):`)
+  console.log('---')
+  console.log(querySectionToPrint)
+}
+
+const writeToFile = transpiledQuery => {
+  const timeStamp = +(new Date())
+
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = path.dirname(__filename)
+
+  const relativeDir = '/../logged_queries'
+  const saveDir = path.join(__dirname, relativeDir)
+
+  if (!fs.existsSync(saveDir)) {
+    fs.mkdirSync(saveDir)
+  }
+
+  const filePath = path.join(__dirname, relativeDir, `/${timeStamp}.sql`)
+
+  fs.appendFile(filePath, transpiledQuery, error => {
+    if (error) {
+      console.log('There was a problem with logging the query:')
+      console.log(error)
+      return
+    }
+
+    console.log('Query is logged: ', filePath)
+  })
 }
 
 const handleError = ({
@@ -79,29 +142,37 @@ const handleError = ({
   params,
   error
 }) => {
-  const queryLines = toQueryLines({ query, params })
+  const transpiledQuery = toTranspiledQuery({ query, params })
 
   const {
     karatLeftOffset,
-    errorLineIndex
-  } = getKaratPosition({ queryLines, params, error })
+    errorLineIndex,
+    leftBoundariesByLine
+  } = getErrorLocation({ transpiledQuery, error })
 
   printError({
-    queryLines,
+    transpiledQuery,
+    leftBoundariesByLine,
     errorLineIndex,
     karatLeftOffset,
     error
   })
+
+  writeToFile(transpiledQuery)
 }
 
 // run this in Node (or REPL) console ----
 const runQA = async () => {
   const query = `
-    SELECT * FROM (
+    SELECT *
+    FROM (
       SELECT 5 AS number, $1 AS second, $2 AS third
       UNION
-      SELECT 5 AS number, 4 AS second
-    ) sub_query;
+      SELECT 5 AS number, 4 AS second, 'foo' AS third
+    ) sub_query
+    LEFT JOIN, (
+      SELECT * FROM UNNEST(ARRAY[1,2,3])
+    );
   `
 
   const params = [1, 'foo']

@@ -1,3 +1,5 @@
-node_modules
-
 .env
+.vscode
+
+node_modules
+logged_queries
