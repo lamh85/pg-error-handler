@@ -7,9 +7,9 @@ import { fileURLToPath } from 'url'
 
 import { pool } from './database_connection.js'
 
-const PRINT_CONFIG = {
-  linesBeforeError: 2,
-  linesAfterError: 2
+PRINTED_ROWS_MAX = {
+  BEFORE: 2,
+  AFTER: 2
 }
 
 const toTranspiledQuery = ({ query, params }) => {
@@ -24,91 +24,44 @@ const toTranspiledQuery = ({ query, params }) => {
   return transpiled
 }
 
-const getErrorLocation = ({ transpiledQuery, error }) => {
-  const leftBoundariesByLine = []
+const getLeftPositions = ({ transpiledQuery, errorPosition }) => {
+  const newLinePositions = []
 
-  transpiledQuery.split('').forEach((character, index) => {
-    if (character !== '\n') return
+  const queryCharacters = transpiledQuery.split('')
 
-    const position = index + 1
-    leftBoundariesByLine.push(position)
-  })
-
-  let errorLineIndex = null
-  const errorPosition = error.position
-  leftBoundariesByLine.forEach((position, index) => {
-    if (errorLineIndex !== null) return
-
-    if (index === (leftBoundariesByLine.length - 1)) {
-      errorLineIndex = index
-      return
-    }
-
-    const currentLinePosition = position
-    const nextLineLeftBoundary = leftBoundariesByLine[index + 1]
-
-
-    if (errorPosition >= currentLinePosition && errorPosition <= nextLineLeftBoundary) {
-      errorLineIndex = index
+  queryCharacters.forEach((character, index) => {
+    if (character === '\n') {
+      newLinePositions.push(index + 1)
     }
   })
 
-  const errorLinePosition = leftBoundariesByLine[errorLineIndex]
-  const karatLeftOffset = errorPosition - errorLinePosition
+  let errorLeftPosition = null
 
-  return { errorLineIndex, karatLeftOffset, leftBoundariesByLine }
+  newLinePositions.forEach((position, index) => {
+    if (errorLeftPosition !== null) return
+
+    if (errorPosition >= position && errorPosition < newLinePositions[index + 1]) {
+      errorLeftPosition = position
+    }
+  })
+
+  return { errorLeftPosition, newLinePositions }
 }
 
-const printError = ({
-  transpiledQuery,
-  leftBoundariesByLine,
-  errorLineIndex,
-  karatLeftOffset,
-  error
-}) => {
-  const karatLine = '▲'.padStart(karatLeftOffset, ' ')
+const getKaratLine = ({ newLinePositions, errorLeftPosition, errorPosition}) => {
 
-  const lineIndexAfterError = errorLineIndex + 1
-  const errorLineRightBoundary = leftBoundariesByLine[lineIndexAfterError] - 1
+  // keep this ----------------------
 
-  const firstPrintLineIndex = Math.max(
-    0,
-    errorLineIndex - PRINT_CONFIG.linesBeforeError
-  )
-
-  const firstPrintLineLeftBoundary = leftBoundariesByLine[firstPrintLineIndex]
-
-  const lastPrintLineIndex = Math.min(
-    leftBoundariesByLine.length - 1,
-    errorLineIndex + PRINT_CONFIG.linesAfterError
-  )
-
-  let lastPrintLineRightBoundary = transpiledQuery.length
-  if (lastPrintLineIndex < leftBoundariesByLine.length - 1) {
-    lastPrintLineRightBoundary = leftBoundariesByLine[lastPrintLineIndex + 1] - 1
+  let karatLeftOffset = 0
+  if (!newLinePositions.includes(errorPosition)) {
+    karatLeftOffset = errorPosition - errorLeftPosition
   }
 
-  const querySectionToPrint = transpiledQuery
-    .split('')
-    .map((character, index) => {
-      const position = index + 1
+  return '▲'.padStart(karatLeftOffset, ' ')
+}
 
-      if (position < firstPrintLineLeftBoundary || position > lastPrintLineRightBoundary) {
-        return
-      }
-
-      if (position === errorLineRightBoundary) {
-        return character + '\n' + karatLine
-      } else {
-        return character
-      }
-    })
-    .join('')
-
-  console.log('Message from the `error` object: ', error.message)
-  console.log(`Query location of the error (lines ${firstPrintLineIndex + 1} to ${lastPrintLineIndex + 1}):`)
-  console.log('---')
-  console.log(querySectionToPrint)
+const getPrintedQuery = ({ transpiledQuery, newLinePositions, karatLine }) => {
+  const errorLineIndex = newLinePositions.indexOf(errorLeftPosition)
 }
 
 const writeToFile = transpiledQuery => {
@@ -143,18 +96,16 @@ const handleError = ({
 }) => {
   const transpiledQuery = toTranspiledQuery({ query, params })
 
-  const {
-    karatLeftOffset,
-    errorLineIndex,
-    leftBoundariesByLine
-  } = getErrorLocation({ transpiledQuery, error })
+  const errorPosition = error.position
 
-  printError({
+  const karatLine = getKaratLine({
     transpiledQuery,
-    leftBoundariesByLine,
-    errorLineIndex,
-    karatLeftOffset,
-    error
+    errorPosition
+  })
+
+  const { errorLeftPosition, newLinePositions } = getLeftPositions({
+    transpiledQuery,
+    errorPosition
   })
 
   writeToFile(transpiledQuery)
