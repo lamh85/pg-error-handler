@@ -66,8 +66,8 @@ const getPrintedQuery = ({ transpiledQuery, newLinePositions, karatLine, errorLe
 
   const printPositions = {
     first: null,
-    leftAfterError: null,
-    last: null
+    errorLineRight: transpiledQuery.length,
+    last: transpiledQuery.length
   }
 
   let firstLineIndex = errorLineIndex - PRINTED_ROWS_MAX.BEFORE
@@ -77,9 +77,9 @@ const getPrintedQuery = ({ transpiledQuery, newLinePositions, karatLine, errorLe
 
   printPositions.first = newLinePositions[firstLineIndex]
 
-  printPositions.leftAfterError = newLinePositions[errorLineIndex + 1]
-  if (!printPositions.leftAfterError) {
-    printPositions.leftAfterError = transpiledQuery.length
+  const leftAfterError = newLinePositions[errorLineIndex + 1]
+  if (leftAfterError) {
+    printPositions.errorLineRight = leftAfterError - 1
   }
 
   let lastLineIndex = errorLineIndex + PRINTED_ROWS_MAX.AFTER
@@ -89,7 +89,6 @@ const getPrintedQuery = ({ transpiledQuery, newLinePositions, karatLine, errorLe
 
   let leftPositionAfterLastLine = newLinePositions[lastLineIndex + 1]
 
-  printPositions.last = transpiledQuery.length
   if (leftPositionAfterLastLine) {
     printPositions.last = leftPositionAfterLastLine - 1
   }
@@ -101,8 +100,8 @@ const getPrintedQuery = ({ transpiledQuery, newLinePositions, karatLine, errorLe
       return ''
     }
 
-    if (position == printPositions.leftAfterError) {
-      return '\n' + karatLine + character
+    if (position == printPositions.errorLineRight) {
+      return character + '\n' + karatLine
     } else {
       return character
     }
@@ -205,8 +204,7 @@ const runQA = async () => {
     ) sub_query
     LEFT JOIN (
       SELECT * FROM UNNEST(ARRAY[1,2,3])
-    ) some_set ON TRUE;
-  `
+    ) some_set ON TRUE;`
 
   const params = [1, 'foo']
 
