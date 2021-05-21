@@ -25,7 +25,7 @@ const toTranspiledQuery = ({ query, params }) => {
 }
 
 const getLeftPositions = ({ transpiledQuery, errorPosition }) => {
-  const newLinePositions = []
+  const newLinePositions = [1]
 
   const queryCharacters = transpiledQuery.split('')
 
@@ -39,6 +39,10 @@ const getLeftPositions = ({ transpiledQuery, errorPosition }) => {
 
   newLinePositions.forEach((position, index) => {
     if (errorLeftPosition !== null) return
+
+    if (index === newLinePositions.length - 1) {
+      errorLeftPosition = position
+    }
 
     if (errorPosition >= position && errorPosition < newLinePositions[index + 1]) {
       errorLeftPosition = position
@@ -90,7 +94,7 @@ const getPrintedQuery = ({ transpiledQuery, newLinePositions, karatLine, errorLe
     printPositions.last = leftPositionAfterLastLine - 1
   }
 
-  return transpiledQuery.split('').map((character, index) => {
+  const printedQuery = transpiledQuery.split('').map((character, index) => {
     const position = index + 1
 
     if (position < printPositions.first || position > printPositions.last) {
@@ -103,6 +107,26 @@ const getPrintedQuery = ({ transpiledQuery, newLinePositions, karatLine, errorLe
       return character
     }
   }).join('')
+
+  return {
+    printedQuery,
+    firstLineNumber: firstLineIndex + 1,
+    lastLineNumber: lastLineIndex + 1
+  }
+}
+
+const printError = ({ printedQuery, errorMessage, firstLineNumber, lastLineNumber }) => {
+  const printedLines = [
+    `Postgres error: ${errorMessage}`,
+    `Source of error: lines ${firstLineNumber} to ${lastLineNumber}:`,
+    '---',
+    printedQuery,
+    '---'
+  ]
+
+  printedLines.forEach(line => {
+    console.log(line)
+  })
 }
 
 const writeToFile = transpiledQuery => {
@@ -150,30 +174,38 @@ const handleError = ({
     errorPosition
   })
 
-  const printedQuery = getPrintedQuery({
+  const {
+    printedQuery,
+    firstLineNumber,
+    lastLineNumber
+  } = getPrintedQuery({
     transpiledQuery,
     newLinePositions,
     karatLine,
     errorLeftPosition
   })
 
-  console.log(printedQuery)
+  printError({
+    printedQuery,
+    errorMessage: error.message,
+    firstLineNumber,
+    lastLineNumber
+  })
 
   // writeToFile(transpiledQuery)
 }
 
 // run this in Node (or REPL) console ----
 const runQA = async () => {
-  const query = `
-    SELECT *
+  const query = `SELECT, *
     FROM (
       SELECT 5 AS number, $1 AS second, $2 AS third
       UNION
       SELECT 5 AS number, 4 AS second, 'foo' AS third
     ) sub_query
-    LEFT JOIN, (
+    LEFT JOIN (
       SELECT * FROM UNNEST(ARRAY[1,2,3])
-    );
+    ) some_set ON TRUE;
   `
 
   const params = [1, 'foo']
